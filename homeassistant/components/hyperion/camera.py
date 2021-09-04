@@ -9,7 +9,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 import functools
 import logging
-from typing import Any, Callable
+from typing import Any
 
 from aiohttp import web
 from hyperion import client
@@ -27,13 +27,13 @@ from homeassistant.components.camera import (
     async_get_still_stream,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
     async_dispatcher_send,
 )
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.typing import HomeAssistantType
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import (
     get_hyperion_device_id,
@@ -56,8 +56,10 @@ IMAGE_STREAM_JPG_SENTINEL = "data:image/jpg;base64,"
 
 
 async def async_setup_entry(
-    hass: HomeAssistantType, config_entry: ConfigEntry, async_add_entities: Callable
-) -> bool:
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Set up a Hyperion platform from config entry."""
     entry_data = hass.data[DOMAIN][config_entry.entry_id]
     server_id = config_entry.unique_id
@@ -94,7 +96,6 @@ async def async_setup_entry(
         )
 
     listen_for_instance_updates(hass, config_entry, instance_add, instance_remove)
-    return True
 
 
 # A note on Hyperion streaming semantics:
@@ -209,7 +210,9 @@ class HyperionCamera(Camera):
         finally:
             await self._stop_image_streaming_for_client()
 
-    async def async_camera_image(self) -> bytes | None:
+    async def async_camera_image(
+        self, width: int | None = None, height: int | None = None
+    ) -> bytes | None:
         """Return single camera image bytes."""
         async with self._image_streaming() as is_streaming:
             if is_streaming:
@@ -232,7 +235,6 @@ class HyperionCamera(Camera):
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks when entity added to hass."""
-        assert self.hass
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,

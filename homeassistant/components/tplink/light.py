@@ -66,16 +66,24 @@ LIGHT_SYSINFO_IS_COLOR = "is_color"
 MAX_ATTEMPTS = 300
 SLEEP_TIME = 2
 
-TPLINK_KELVIN = {
-    "LB130": (2500, 9000),
-    "LB120": (2700, 6500),
-    "LB230": (2500, 9000),
-    "KB130": (2500, 9000),
-    "KL130": (2500, 9000),
-    "KL125": (2500, 6500),
-    r"KL120\(EU\)": (2700, 6500),
-    r"KL120\(US\)": (2700, 5000),
-    r"KL430\(US\)": (2500, 9000),
+
+class ColorTempRange(NamedTuple):
+    """Color temperature range (in Kelvin)."""
+
+    min: int
+    max: int
+
+
+TPLINK_KELVIN: dict[str, ColorTempRange] = {
+    "LB130": ColorTempRange(2500, 9000),
+    "LB120": ColorTempRange(2700, 6500),
+    "LB230": ColorTempRange(2500, 9000),
+    "KB130": ColorTempRange(2500, 9000),
+    "KL130": ColorTempRange(2500, 9000),
+    "KL125": ColorTempRange(2500, 6500),
+    r"KL120\(EU\)": ColorTempRange(2700, 6500),
+    r"KL120\(US\)": ColorTempRange(2700, 5000),
+    r"KL430\(US\)": ColorTempRange(2500, 9000),
 }
 
 FALLBACK_MIN_COLOR = 2700
@@ -294,7 +302,7 @@ class TPLinkSmartBulb(LightEntity):
         """Flag supported features."""
         return self._light_features.supported_features
 
-    def _get_valid_temperature_range(self) -> tuple[int, int]:
+    def _get_valid_temperature_range(self) -> ColorTempRange:
         """Return the device-specific white temperature range (in Kelvin).
 
         :return: White temperature range in Kelvin (minimum, maximum)
@@ -305,7 +313,7 @@ class TPLinkSmartBulb(LightEntity):
                 return temp_range
         # pyHS100 is abandoned, but some bulb definitions aren't present
         # use "safe" values for something that advertises color temperature
-        return FALLBACK_MIN_COLOR, FALLBACK_MAX_COLOR
+        return ColorTempRange(FALLBACK_MIN_COLOR, FALLBACK_MAX_COLOR)
 
     def _get_light_features(self) -> LightFeatures:
         """Determine all supported features in one go."""
@@ -323,9 +331,9 @@ class TPLinkSmartBulb(LightEntity):
             supported_features += SUPPORT_BRIGHTNESS
         if sysinfo.get(LIGHT_SYSINFO_IS_VARIABLE_COLOR_TEMP):
             supported_features += SUPPORT_COLOR_TEMP
-            max_range, min_range = self._get_valid_temperature_range()
-            min_mireds = kelvin_to_mired(min_range)
-            max_mireds = kelvin_to_mired(max_range)
+            color_temp_range = self._get_valid_temperature_range()
+            min_mireds = kelvin_to_mired(color_temp_range.max)
+            max_mireds = kelvin_to_mired(color_temp_range.min)
         if sysinfo.get(LIGHT_SYSINFO_IS_COLOR):
             supported_features += SUPPORT_COLOR
 
@@ -432,7 +440,10 @@ class TPLinkSmartBulb(LightEntity):
             self._is_setting_light_state = False
             if LIGHT_STATE_ERROR_MSG in light_state_params:
                 raise HomeAssistantError(light_state_params[LIGHT_STATE_ERROR_MSG])
-            self._light_state = self._light_state_from_params(light_state_params)
+            # Some devices do not report the new state in their responses, so we skip
+            # set here and wait for the next poll to update the values. See #47600
+            if LIGHT_STATE_ON_OFF in light_state_params:
+                self._light_state = self._light_state_from_params(light_state_params)
             return
         except (SmartDeviceException, OSError):
             pass
