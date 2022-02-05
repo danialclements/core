@@ -115,7 +115,7 @@ async def test_entity_picture_template(hass, start_ha):
 
 @pytest.mark.parametrize("count,domain", [(1, sensor.DOMAIN)])
 @pytest.mark.parametrize(
-    "attribute,config",
+    "attribute,config,expected",
     [
         (
             "friendly_name",
@@ -130,6 +130,22 @@ async def test_entity_picture_template(hass, start_ha):
                     },
                 },
             },
+            ("It .", "It Works."),
+        ),
+        (
+            "friendly_name",
+            {
+                "sensor": {
+                    "platform": "template",
+                    "sensors": {
+                        "test_template_sensor": {
+                            "value_template": "{{ states.sensor.test_state.state }}",
+                            "friendly_name_template": "{{ 'It ' + states.sensor.test_state.state + '.'}}",
+                        }
+                    },
+                },
+            },
+            (None, "It Works."),
         ),
         (
             "friendly_name",
@@ -144,6 +160,7 @@ async def test_entity_picture_template(hass, start_ha):
                     },
                 },
             },
+            ("It .", "It Works."),
         ),
         (
             "test_attribute",
@@ -160,16 +177,17 @@ async def test_entity_picture_template(hass, start_ha):
                     },
                 },
             },
+            ("It .", "It Works."),
         ),
     ],
 )
-async def test_friendly_name_template(hass, attribute, start_ha):
+async def test_friendly_name_template(hass, attribute, expected, start_ha):
     """Test friendly_name template with an unknown value_template."""
-    assert hass.states.get(TEST_NAME).attributes.get(attribute) == "It ."
+    assert hass.states.get(TEST_NAME).attributes.get(attribute) == expected[0]
 
     hass.states.async_set("sensor.test_state", "Works")
     await hass.async_block_till_done()
-    assert hass.states.get(TEST_NAME).attributes[attribute] == "It Works."
+    assert hass.states.get(TEST_NAME).attributes[attribute] == expected[1]
 
 
 @pytest.mark.parametrize("count,domain", [(0, sensor.DOMAIN)])
@@ -234,7 +252,7 @@ async def test_friendly_name_template(hass, attribute, start_ha):
 )
 async def test_template_syntax_error(hass, start_ha):
     """Test setup with invalid device_class."""
-    assert hass.states.async_all() == []
+    assert hass.states.async_all("sensor") == []
 
 
 @pytest.mark.parametrize("count,domain", [(1, sensor.DOMAIN)])
@@ -381,7 +399,7 @@ async def test_available_template_with_entities(hass, start_ha):
         },
     ],
 )
-async def test_invalid_attribute_template(hass, caplog, start_ha):
+async def test_invalid_attribute_template(hass, caplog, start_ha, caplog_setup_text):
     """Test that errors are logged if rendering template fails."""
     hass.states.async_set("sensor.test_sensor", "startup")
     await hass.async_block_till_done()
@@ -390,9 +408,7 @@ async def test_invalid_attribute_template(hass, caplog, start_ha):
     hass.bus.async_fire(EVENT_HOMEASSISTANT_START)
     await hass.async_block_till_done()
     await hass.helpers.entity_component.async_update_entity("sensor.invalid_template")
-
-    messages = str([x.message for x in caplog.get_records("setup")])
-    assert "TemplateError" in messages
+    assert "TemplateError" in caplog_setup_text
     assert "test_attribute" in caplog.text
 
 
@@ -414,12 +430,11 @@ async def test_invalid_attribute_template(hass, caplog, start_ha):
     ],
 )
 async def test_invalid_availability_template_keeps_component_available(
-    hass, caplog, start_ha
+    hass, start_ha, caplog_setup_text
 ):
     """Test that an invalid availability keeps the device available."""
     assert hass.states.get("sensor.my_sensor").state != STATE_UNAVAILABLE
-    messages = str([x.message for x in caplog.get_records("setup")])
-    assert "UndefinedError: \\'x\\' is undefined" in messages
+    assert "UndefinedError: 'x' is undefined" in caplog_setup_text
 
 
 async def test_no_template_match_all(hass, caplog):
@@ -624,14 +639,12 @@ async def test_sun_renders_once_per_sensor(hass, start_ha):
         },
     ],
 )
-async def test_self_referencing_sensor_loop(hass, caplog, start_ha):
+async def test_self_referencing_sensor_loop(hass, start_ha, caplog_setup_text):
     """Test a self referencing sensor does not loop forever."""
     assert len(hass.states.async_all()) == 1
     await hass.async_block_till_done()
     await hass.async_block_till_done()
-    messages = str([x.message for x in caplog.get_records("setup")])
-    assert "Template loop detected" in messages
-
+    assert "Template loop detected" in caplog_setup_text
     assert int(hass.states.get("sensor.test").state) == 2
     await hass.async_block_till_done()
     assert int(hass.states.get("sensor.test").state) == 2
@@ -654,13 +667,14 @@ async def test_self_referencing_sensor_loop(hass, caplog, start_ha):
         },
     ],
 )
-async def test_self_referencing_sensor_with_icon_loop(hass, caplog, start_ha):
+async def test_self_referencing_sensor_with_icon_loop(
+    hass, start_ha, caplog_setup_text
+):
     """Test a self referencing sensor loops forever with a valid self referencing icon."""
     assert len(hass.states.async_all()) == 1
     await hass.async_block_till_done()
     await hass.async_block_till_done()
-    messages = str([x.message for x in caplog.get_records("setup")])
-    assert "Template loop detected" in messages
+    assert "Template loop detected" in caplog_setup_text
 
     state = hass.states.get("sensor.test")
     assert int(state.state) == 3
@@ -689,14 +703,13 @@ async def test_self_referencing_sensor_with_icon_loop(hass, caplog, start_ha):
     ],
 )
 async def test_self_referencing_sensor_with_icon_and_picture_entity_loop(
-    hass, caplog, start_ha
+    hass, start_ha, caplog_setup_text
 ):
     """Test a self referencing sensor loop forevers with a valid self referencing icon."""
     assert len(hass.states.async_all()) == 1
     await hass.async_block_till_done()
     await hass.async_block_till_done()
-    messages = str([x.message for x in caplog.get_records("setup")])
-    assert "Template loop detected" in messages
+    assert "Template loop detected" in caplog_setup_text
 
     state = hass.states.get("sensor.test")
     assert int(state.state) == 4
@@ -724,7 +737,7 @@ async def test_self_referencing_sensor_with_icon_and_picture_entity_loop(
         },
     ],
 )
-async def test_self_referencing_entity_picture_loop(hass, caplog, start_ha):
+async def test_self_referencing_entity_picture_loop(hass, start_ha, caplog_setup_text):
     """Test a self referencing sensor does not loop forever with a looping self referencing entity picture."""
     assert len(hass.states.async_all()) == 1
     next_time = dt_util.utcnow() + timedelta(seconds=1.2)
@@ -735,8 +748,7 @@ async def test_self_referencing_entity_picture_loop(hass, caplog, start_ha):
         await hass.async_block_till_done()
         await hass.async_block_till_done()
 
-    messages = str([x.message for x in caplog.get_records("setup")])
-    assert "Template loop detected" in messages
+    assert "Template loop detected" in caplog_setup_text
 
     state = hass.states.get("sensor.test")
     assert int(state.state) == 1
@@ -1006,14 +1018,13 @@ async def test_trigger_entity_render_error(hass, start_ha):
         },
     ],
 )
-async def test_trigger_not_allowed_platform_config(hass, caplog, start_ha):
+async def test_trigger_not_allowed_platform_config(hass, start_ha, caplog_setup_text):
     """Test we throw a helpful warning if a trigger is configured in platform config."""
     state = hass.states.get(TEST_NAME)
     assert state is None
-    messages = str([x.message for x in caplog.get_records("setup")])
     assert (
         "You can only add triggers to template entities if they are defined under `template:`."
-        in messages
+        in caplog_setup_text
     )
 
 
@@ -1083,3 +1094,169 @@ async def test_trigger_entity_available(hass):
 
     state = hass.states.get("sensor.maybe_available")
     assert state.state == "unavailable"
+
+
+async def test_trigger_entity_device_class_parsing_works(hass):
+    """Test trigger entity device class parsing works."""
+    assert await async_setup_component(
+        hass,
+        "template",
+        {
+            "template": [
+                {
+                    "trigger": {"platform": "event", "event_type": "test_event"},
+                    "sensor": [
+                        {
+                            "name": "Date entity",
+                            "state": "{{ now().date() }}",
+                            "device_class": "date",
+                        },
+                        {
+                            "name": "Timestamp entity",
+                            "state": "{{ now() }}",
+                            "device_class": "timestamp",
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+
+    await hass.async_block_till_done()
+
+    now = dt_util.now()
+
+    with patch("homeassistant.util.dt.now", return_value=now):
+        hass.bus.async_fire("test_event")
+        await hass.async_block_till_done()
+
+    date_state = hass.states.get("sensor.date_entity")
+    assert date_state is not None
+    assert date_state.state == now.date().isoformat()
+
+    ts_state = hass.states.get("sensor.timestamp_entity")
+    assert ts_state is not None
+    assert ts_state.state == now.isoformat(timespec="seconds")
+
+
+async def test_trigger_entity_device_class_errors_works(hass):
+    """Test trigger entity device class errors works."""
+    assert await async_setup_component(
+        hass,
+        "template",
+        {
+            "template": [
+                {
+                    "trigger": {"platform": "event", "event_type": "test_event"},
+                    "sensor": [
+                        {
+                            "name": "Date entity",
+                            "state": "invalid",
+                            "device_class": "date",
+                        },
+                        {
+                            "name": "Timestamp entity",
+                            "state": "invalid",
+                            "device_class": "timestamp",
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+
+    await hass.async_block_till_done()
+
+    now = dt_util.now()
+
+    with patch("homeassistant.util.dt.now", return_value=now):
+        hass.bus.async_fire("test_event")
+        await hass.async_block_till_done()
+
+    date_state = hass.states.get("sensor.date_entity")
+    assert date_state is not None
+    assert date_state.state == STATE_UNKNOWN
+
+    ts_state = hass.states.get("sensor.timestamp_entity")
+    assert ts_state is not None
+    assert ts_state.state == STATE_UNKNOWN
+
+
+async def test_entity_device_class_parsing_works(hass):
+    """Test entity device class parsing works."""
+    now = dt_util.now()
+
+    with patch("homeassistant.util.dt.now", return_value=now):
+        assert await async_setup_component(
+            hass,
+            "template",
+            {
+                "template": [
+                    {
+                        "sensor": [
+                            {
+                                "name": "Date entity",
+                                "state": "{{ now().date() }}",
+                                "device_class": "date",
+                            },
+                            {
+                                "name": "Timestamp entity",
+                                "state": "{{ now() }}",
+                                "device_class": "timestamp",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )
+        await hass.async_block_till_done()
+
+    date_state = hass.states.get("sensor.date_entity")
+    assert date_state is not None
+    assert date_state.state == now.date().isoformat()
+
+    ts_state = hass.states.get("sensor.timestamp_entity")
+    assert ts_state is not None
+    assert ts_state.state == now.isoformat(timespec="seconds")
+
+
+async def test_entity_device_class_errors_works(hass):
+    """Test entity device class errors works."""
+    assert await async_setup_component(
+        hass,
+        "template",
+        {
+            "template": [
+                {
+                    "sensor": [
+                        {
+                            "name": "Date entity",
+                            "state": "invalid",
+                            "device_class": "date",
+                        },
+                        {
+                            "name": "Timestamp entity",
+                            "state": "invalid",
+                            "device_class": "timestamp",
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+
+    await hass.async_block_till_done()
+
+    now = dt_util.now()
+
+    with patch("homeassistant.util.dt.now", return_value=now):
+        hass.bus.async_fire("test_event")
+        await hass.async_block_till_done()
+
+    date_state = hass.states.get("sensor.date_entity")
+    assert date_state is not None
+    assert date_state.state == STATE_UNKNOWN
+
+    ts_state = hass.states.get("sensor.timestamp_entity")
+    assert ts_state is not None
+    assert ts_state.state == STATE_UNKNOWN

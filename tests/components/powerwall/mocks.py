@@ -16,6 +16,8 @@ from tesla_powerwall import (
 
 from tests.common import load_fixture
 
+MOCK_GATEWAY_DIN = "111-0----2-000000000FFA"
+
 
 async def _mock_powerwall_with_fixtures(hass):
     """Mock data used to build powerwall state."""
@@ -30,6 +32,7 @@ async def _mock_powerwall_with_fixtures(hass):
         charge=47.34587394586,
         sitemaster=SiteMaster(sitemaster),
         meters=MetersAggregates(meters),
+        grid_services_active=True,
         grid_status=GridStatus.CONNECTED,
         status=PowerwallStatus(status),
         device_type=DeviceType(device_type["device_type"]),
@@ -42,6 +45,7 @@ def _mock_powerwall_return_value(
     charge=None,
     sitemaster=None,
     meters=None,
+    grid_services_active=None,
     grid_status=None,
     status=None,
     device_type=None,
@@ -56,6 +60,7 @@ def _mock_powerwall_return_value(
     powerwall_mock.get_status = Mock(return_value=status)
     powerwall_mock.get_device_type = Mock(return_value=device_type)
     powerwall_mock.get_serial_numbers = Mock(return_value=serial_numbers)
+    powerwall_mock.is_grid_services_active = Mock(return_value=grid_services_active)
 
     return powerwall_mock
 
@@ -67,6 +72,7 @@ async def _mock_powerwall_site_name(hass, site_name):
     # Sets site_info_resp.site_name to return site_name
     site_info_resp.response["site_name"] = site_name
     powerwall_mock.get_site_info = Mock(return_value=site_info_resp)
+    powerwall_mock.get_gateway_din = Mock(return_value=MOCK_GATEWAY_DIN)
 
     return powerwall_mock
 
